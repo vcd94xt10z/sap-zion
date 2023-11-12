@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_HTTP_UTILS definition
   public
   final
@@ -63,19 +68,10 @@ CLASS ZCL_HTTP_UTILS IMPLEMENTATION.
 
 
 method CONSTRUCTOR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-* Versão 0.2
-*
 endmethod.
 
 
 method REQUEST.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ld_url              TYPE string.
   DATA: lo_part             TYPE REF TO if_http_entity.
   DATA: ls_data             LIKE LINE OF is_request-data.

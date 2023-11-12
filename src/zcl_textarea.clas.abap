@@ -1,4 +1,8 @@
-* versão 0.3
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_TEXTAREA definition
   public
   create public .
@@ -100,11 +104,6 @@ endmethod.
 
 
 method CONSTRUCTOR.
-*
-* Autor Vinicius
-* Última atualização 09/08/2023 v0.1
-* https://github.com/vcd94xt10z
-*
   me->md_container = id_container.
 endmethod.
 

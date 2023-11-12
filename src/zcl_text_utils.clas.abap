@@ -1,4 +1,8 @@
-* versão 0.1
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_TEXT_UTILS definition
   public
   create public .

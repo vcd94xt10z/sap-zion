@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_XLS_UTILS definition
   public
   final
@@ -27,11 +32,6 @@ CLASS ZCL_XLS_UTILS IMPLEMENTATION.
 
 
 method CLASS_CONSTRUCTOR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-* Ultima atualização 03/08/2023 v0.3
-*
 endmethod.
 
 

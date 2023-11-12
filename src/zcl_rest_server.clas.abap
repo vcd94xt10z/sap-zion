@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_REST_SERVER definition
   public
   final
@@ -16,10 +21,6 @@ CLASS ZCL_REST_SERVER IMPLEMENTATION.
 
 
 method IF_HTTP_EXTENSION~HANDLE_REQUEST.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ld_id            TYPE string.
   DATA: ld_path          TYPE string.
   DATA: lt_path          TYPE STANDARD TABLE OF string.

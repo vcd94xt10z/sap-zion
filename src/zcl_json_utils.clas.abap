@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_JSON_UTILS definition
   public
   create public .

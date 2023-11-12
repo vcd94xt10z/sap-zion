@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_ECC_TO_S4HANA definition
   public
   final
@@ -32,19 +37,10 @@ CLASS ZCL_ECC_TO_S4HANA IMPLEMENTATION.
 
 
 method CLASS_CONSTRUCTOR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-* Ultima atualização: 11/07/2023
-*
 endmethod.
 
 
 method GET_PARTNER_BY_KUNNR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA ld_partner_guid TYPE cvi_cust_link-partner_guid.
 
   CLEAR rd_partner.
@@ -70,10 +66,6 @@ endmethod.
 
 
 method GET_PARTNER_BY_LIFNR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA ld_partner_guid TYPE cvi_vend_link-partner_guid.
 
   CLEAR rd_partner.
@@ -99,10 +91,6 @@ endmethod.
 
 
 method SHOW_BP.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ld_partner TYPE bus_partner-number.
   DATA: ls_role    TYPE bus_roles.
   DATA: lo_error   TYPE REF TO cx_root.

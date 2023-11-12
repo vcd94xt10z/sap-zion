@@ -1,3 +1,8 @@
+*
+* Autor Vinicius Cesar Dias
+* Projeto https://github.com/vcd94xt10z/sap-zion
+* Versão 0.1
+*
 class ZCL_SMARTFORMS_UTILS definition
   public
   final
@@ -56,19 +61,10 @@ CLASS ZCL_SMARTFORMS_UTILS IMPLEMENTATION.
 
 
 method CLASS_CONSTRUCTOR.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-* Ultima atualização: 11/07/2023
-*
 endmethod.
 
 
 method EXPORT_TO_CLIENT.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ls_job_output_info TYPE ssfcrescl.
 
   CALL METHOD print_or_preview
@@ -88,10 +84,6 @@ endmethod.
 
 
 METHOD export_to_pdf.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: lt_docs      TYPE STANDARD TABLE OF docs.
   DATA: ls_lines     LIKE LINE OF et_lines.
   DATA: ld_string    TYPE string.
@@ -186,10 +178,6 @@ ENDMETHOD.
 
 
 method EXPORT_TO_SERVER.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ls_job_output_info TYPE ssfcrescl.
 
   CALL METHOD print_or_preview
@@ -209,10 +197,6 @@ endmethod.
 
 
 method PREVIEW.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   CALL METHOD print_or_preview
     EXPORTING
       id_label = id_label
@@ -222,10 +206,6 @@ endmethod.
 
 
 method PRINT.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   CALL METHOD print_or_preview
     EXPORTING
       id_label = id_label
@@ -235,10 +215,6 @@ endmethod.
 
 
 METHOD PRINT_OR_PREVIEW.
-*
-* Autor Vinicius Cesar Dias
-* https://github.com/vcd94xt10z
-*
   DATA: ld_fm_name              TYPE rs38l_fnam.
   DATA: st_output_options       TYPE ssfcompop.
   DATA: st_control_parameters   TYPE ssfctrlop.
