@@ -1,7 +1,7 @@
 *
 * Autor Vinicius Cesar Dias
 * Projeto https://github.com/vcd94xt10z/sap-zion
-* Versão 0.1
+* Versão 0.2
 *
 class ZCL_BAL_LOG definition
   public
