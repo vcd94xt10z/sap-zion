@@ -17,7 +17,7 @@ public section.
        , END OF my_text_s .
 
   "types: my_text_t TYPE STANDARD TABLE OF char255 .
-  types: my_text_t TYPE STANDARD TABLE OF zcharmax_e.
+  types: my_text_t TYPE STANDARD TABLE OF zmkpcharmax_e.
 
   data MO_EDITOR type ref to CL_GUI_TEXTEDIT .
   data MO_CONTAINER type ref to CL_GUI_CUSTOM_CONTAINER .
