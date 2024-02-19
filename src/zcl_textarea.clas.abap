@@ -156,7 +156,9 @@ METHOD load_text.
 
   " devolvendo a linha e deixando o textarea fazer as quebras automaticamente
   CLEAR lt_text.
-  APPEND ld_string TO lt_text.
+  "APPEND ld_string TO lt_text.
+  SPLIT ld_string AT cl_abap_char_utilities=>newline
+   INTO TABLE lt_text.
 
   IF me->mo_editor IS NOT BOUND.
     " guardando texto para ser carregado depois
@@ -203,10 +205,9 @@ method SAVE_TEXT.
       " Para representar corretamente, é necessário inserir duas quebras de linha
       CONCATENATE ld_string
                   cl_abap_char_utilities=>newline
-                  cl_abap_char_utilities=>newline
              INTO ld_string RESPECTING BLANKS.
     ELSE.
-      CONCATENATE ld_string ld_line
+      CONCATENATE ld_string ld_line cl_abap_char_utilities=>newline
              INTO ld_string RESPECTING BLANKS.
     ENDIF.
   ENDLOOP.
