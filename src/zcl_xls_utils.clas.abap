@@ -36,9 +36,10 @@ endmethod.
 
 
 method ITAB_TO_XLS.
-  DATA lt_bintab   TYPE solix_tab.
-  DATA ld_xstring  TYPE xstring.
-  DATA lr_data_ref TYPE REF TO data.
+  DATA: ld_bin_filesize TYPE int4.
+  DATA: lt_bintab       TYPE solix_tab.
+  DATA: ld_xstring      TYPE xstring.
+  DATA: lr_data_ref     TYPE REF TO data.
 
   FIELD-SYMBOLS: <ls_data> TYPE ANY TABLE.
 
@@ -90,10 +91,13 @@ method ITAB_TO_XLS.
       TABLES
         binary_tab = lt_bintab.
 
+    ld_bin_filesize = xstrlen( ld_xstring ).
+
     cl_gui_frontend_services=>gui_download(
       EXPORTING
         filename                  = xls_file
         filetype                  = 'BIN'
+        bin_filesize              = ld_bin_filesize
       CHANGING
         data_tab                  = lt_bintab
       EXCEPTIONS
