@@ -138,6 +138,10 @@ method XLS_TO_ITAB.
   DATA: ld_worksheet_name TYPE string.
   DATA: lo_worksheet_itab TYPE REF TO data.
 
+  DATA: ld_valuef     TYPE f.
+  DATA: ld_valuep(16) TYPE p DECIMALS 14.
+  DATA: ld_valuedecf  TYPE decfloat34.
+
   FIELD-SYMBOLS: <ls_itab>       TYPE any.
   FIELD-SYMBOLS: <ld_value_to>   TYPE any.
   FIELD-SYMBOLS: <lt_worksheet>  TYPE STANDARD TABLE.
@@ -231,7 +235,17 @@ method XLS_TO_ITAB.
         EXIT.
       ENDIF.
 
-      <ld_value_to> = <ld_value_from>.
+      " 01/02/2025 tratando erro com valores decimais interpretados pelo excel
+      " onde converte o valor 0.149 em algo como 1.4999999999999999E-2
+      TRY.
+        <ld_value_to> = <ld_value_from>.
+      CATCH CX_SY_CONVERSION_NO_NUMBER INTO DATA(lo_ex).
+        ld_valuef     = <ld_value_from>.
+        ld_valuef     = cl_abap_math=>round_f_to_15_decs( f_in = ld_valuef ).
+        ld_valuedecf  = ld_valuef.
+        ld_valuep     = ld_valuedecf.
+        <ld_value_to> = ld_valuep.
+      ENDTRY.
     ENDDO.
   ENDLOOP.
 endmethod.
