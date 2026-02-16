@@ -686,7 +686,7 @@ method SERVER_FOLDER_CAN_WRITE.
   ld_file = |{ id_folder }temp_file_{ sy-datum }{ sy-uzeit }{ sy-uname }.tmp|.
 
   " tentando criar o arquivo
-  OPEN DATASET ld_file FOR INPUT IN TEXT MODE ENCODING DEFAULT.
+  OPEN DATASET ld_file FOR OUTPUT IN TEXT MODE ENCODING UTF-8.
   IF sy-subrc <> 0.
     RETURN.
   ENDIF.
