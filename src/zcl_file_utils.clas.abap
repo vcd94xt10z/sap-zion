@@ -1,13 +1,30 @@
 *
 * Autor Vinicius Cesar Dias
 * Projeto https://github.com/vcd94xt10z/sap-zion
-* Versão 0.1
+* Versão 0.2 16/02/2026
 *
 class ZCL_FILE_UTILS definition
   public
   create public .
 
 public section.
+
+  types:
+    BEGIN OF MY_FILE
+       , filename    TYPE string
+       , fullpath    TYPE string
+       , filesize    TYPE int4
+       , extension   TYPE string
+       , type        TYPE char1 " F or D
+       , owner       TYPE string
+       , create_date TYPE datum
+       , create_time TYPE uzeit
+       , change_date TYPE datum
+       , change_time TYPE uzeit
+       , chmod       TYPE char4
+       , END OF my_file .
+  types:
+    my_file_t TYPE STANDARD TABLE OF my_file .
 
   class-methods REQUEST_USER_FILE
     importing
@@ -67,6 +84,12 @@ public section.
       value(ID_FOLDER) type ANY
     returning
       value(RD_BOOL) type ABAP_BOOL .
+  class-methods SERVER_LIST_FOLDER
+    importing
+      value(ID_FOLDER) type ANY
+    exporting
+      value(ET_FILE_LIST) type MY_FILE_T
+      value(ED_ERROR_MESSAGE) type STRING .
   class-methods PC_CREATE_FOLDER .
   class-methods PC_DELETE_FOLDER .
   class-methods PC_DELETE_FILE .
@@ -83,6 +106,11 @@ public section.
       value(ID_FOLDER) type ANY
     exporting
       value(ED_PARENT) type ANY .
+  class-methods GET_FOLDER_SEPARATOR
+    importing
+      !ID_FOLDER type STRING
+    returning
+      value(RD_SEPARATOR) type STRING .
 protected section.
 private section.
 ENDCLASS.
@@ -160,7 +188,7 @@ method GET_FILENAME_EXTENSION.
     RETURN.
   ENDIF.
 
-  TRANSLATE id_filename TO LOWER CASE.
+  TRANSLATE id_filename TO UPPER CASE.
 
   SPLIT id_filename AT '.' INTO TABLE lt_piece.
   IF lines( lt_piece ) <= 0.
@@ -176,6 +204,23 @@ method GET_FILENAME_EXTENSION.
   ENDIF.
 
   rd_extension = ld_piece.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>GET_FOLDER_SEPARATOR
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        STRING
+* | [<-()] RD_SEPARATOR                   TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method GET_FOLDER_SEPARATOR.
+  " detectando separador
+  rd_separator = '/'.
+  IF id_folder CS '\\'.
+    rd_separator = '\\'.
+  ELSEIF id_folder CS '\'.
+    rd_separator = '\'.
+  ENDIF.
 endmethod.
 
 
@@ -697,6 +742,212 @@ method SERVER_FOLDER_EXISTS.
   ELSE.
     rd_bool = abap_false.
   ENDIF.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_LIST_FOLDER
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<---] ET_FILE_LIST                   TYPE        MY_FILE_T
+* | [<---] ED_ERROR_MESSAGE               TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_LIST_FOLDER.
+  CONSTANTS: c_file_list_update TYPE c VALUE 'U'.
+
+  types: begin of ly_file,
+         dirname     type dirname_al11,   " name of directory
+         name        type filename_al11,  " name of entry
+         type(10)    type c,              " type of entry.
+         len(8)      type p DECIMALS 0,              " length in bytes.
+         owner       type fileowner_al11, " owner of the entry.
+         mtime(6)    type p DECIMALS 0,              " last mod.date, sec since 1970
+         mode(9)     type c,              " like "rwx-r-x--x": prot. mode
+         useable(1)  type c,
+         subrc(4)    type c,
+         errno(3)    type c,
+         errmsg(40)  type c,
+         mod_date    type d,
+         mod_time(8) type c,              " hh:mm:ss
+         seen(1)     type c,
+         changed(1)  type c,
+         status(1)   type c,
+       end of ly_file.
+
+  DATA: ld_errno(3)     TYPE c.
+  DATA: ld_errmsg(40)   TYPE c.
+  DATA: ld_folder(1024) TYPE c.
+  DATA: lt_file         TYPE STANDARD TABLE OF ly_file WITH NON-UNIQUE SORTED KEY K1 COMPONENTS NAME.
+  DATA: ls_file         TYPE ly_file.
+  DATA: ld_separator    TYPE string.
+
+  DATA: ls_file_list LIKE LINE OF et_file_list.
+
+  DATA: a_must_cs(1) TYPE c.
+  DATA: no_cs        VALUE ' '.
+
+  DATA: errcnt      TYPE i VALUE 0.
+  DATA: a_operation TYPE c VALUE 'I'.
+
+  FIELD-SYMBOLS: <ls_file> TYPE ly_file.
+
+  CLEAR ld_errno.
+  CLEAR ld_errmsg.
+  CLEAR lt_file.
+  CLEAR et_file_list.
+
+  ld_folder = id_folder.
+
+  get_folder_separator(
+    EXPORTING
+      id_folder    = id_folder
+    RECEIVING
+      rd_separator = ld_separator
+  ).
+
+  " garantindo que não tenha nenhuma solicitação anterior em aberto
+  call 'C_DIR_READ_FINISH'
+      id 'ERRNO'  field ld_errno
+      id 'ERRMSG' field ld_errmsg.
+
+  call 'C_DIR_READ_START' id 'DIR'    field ld_folder
+                          id 'FILE'   field '*'
+                          id 'ERRNO'  field ld_errno
+                          id 'ERRMSG' field ld_errmsg.
+
+  IF sy-subrc <> 0.
+    ed_error_message = |{ ld_errno } { ld_errmsg }|.
+    RETURN.
+  ENDIF.
+
+  DO.
+    clear ls_file.
+    call 'C_DIR_READ_NEXT'
+      id 'TYPE'   field ls_file-type
+      id 'NAME'   field ls_file-name
+      id 'LEN'    field ls_file-len
+      id 'OWNER'  field ls_file-owner
+      id 'MTIME'  field ls_file-mtime
+      id 'MODE'   field ls_file-mode
+      id 'ERRNO'  field ls_file-errno
+      id 'ERRMSG' field ls_file-errmsg.
+    ls_file-dirname = ld_folder.
+    move sy-subrc to ls_file-subrc.
+    case sy-subrc.
+      when 0.
+        clear: ls_file-errno, ls_file-errmsg.
+        case ls_file-type(1).
+          when 'F'.                    " normal file.
+            perform filename_useable IN PROGRAM RSWATCH0 using ls_file-name changing ls_file-useable.
+          when 'f'.                    " normal file.
+            perform filename_useable IN PROGRAM RSWATCH0 using ls_file-name changing ls_file-useable.
+          when others. " directory, device, fifo, socket,...
+            move abap_false  to ls_file-useable.
+        endcase.
+        if ls_file-len = 0.
+          move abap_false to ls_file-useable.
+        endif.
+      when 1.
+        "No more slots available.
+        exit.
+      when 5.
+        "Only NAME is valid due to internal error.
+        clear: ls_file-type, ls_file-len, ls_file-owner, ls_file-mtime, ls_file-mode,
+               ls_file-errno, ls_file-errmsg.
+        ls_file-useable = abap_false.
+      when others.
+        "possible other return codes (sapaci2.c)
+        "3 ... Internal error.
+        "4 ... NAME is truncated (Warning only)
+        add 1 to errcnt.
+        "don't list files with error
+        if ls_file-subrc = 3.
+          continue.
+        endif.
+    endcase.
+    perform p6_to_date_time_tz IN PROGRAM rstr0400 using ls_file-mtime
+                                               ls_file-mod_time
+                                               ls_file-mod_date.
+
+
+    if a_operation eq c_file_list_update.
+      read table lt_file with key k1 components name = ls_file-name assigning <ls_file>.
+
+      if sy-subrc eq 0.
+        "In case file is found in the list means it already exists, otherwise, file does not exist anymore
+        if <ls_file>-type  <> ls_file-type  or
+           <ls_file>-len   <> ls_file-len   or
+           <ls_file>-owner <> ls_file-owner or
+           <ls_file>-mtime <> ls_file-mtime or
+           <ls_file>-mode  <> ls_file-mode  or
+           <ls_file>-errno <> ls_file-errno.
+
+          ls_file-changed = abap_true.
+        endif.
+        ls_file-status = abap_true.
+
+        move-corresponding ls_file to <ls_file>.
+
+      else.
+        "New File
+        ls_file-status = abap_true.
+
+*       * Does the filename contains the requested pattern?
+*       * Then store it, else forget it.
+        if a_must_cs = no_cs.
+          "append ls_file TO lt_file.
+        else.
+          if ls_file-name cs a_must_cs.
+            "append ls_file TO lt_file.
+          endif.
+        endif.
+
+      endif.
+    else.
+
+      "Build a new list
+      ls_file-status = abap_true.
+
+*     * Does the filename contains the requested pattern?
+*     * Then store it, else forget it.
+      if a_must_cs = no_cs.
+        "append ls_file TO lt_file.
+      else.
+        if ls_file-name cs a_must_cs.
+          "append ls_file TO lt_file.
+        endif.
+      endif.
+    endif.
+
+    IF ls_file-name = '.' OR ls_file-name = '..'.
+      CONTINUE.
+    ENDIF.
+
+    REPLACE ALL OCCURRENCES OF REGEX '[^0-9]' IN ls_file-mod_time WITH ''.
+
+    CLEAR ls_file_list.
+    ls_file_list-filename = ls_file-name.
+    ls_file_list-fullpath = |{ id_folder }{ ls_file-name }|.
+    ls_file_list-filesize = ls_file-len.
+    ls_file_list-extension = get_filename_extension( id_filename = ls_file_list-filename ).
+    ls_file_list-owner     = ls_file_list-owner.
+    ls_file_list-type      = 'F'.
+    IF ls_file-type(1) = 'd'.
+      ls_file_list-type = 'D'.
+      ls_file_list-fullpath = |{ ls_file_list-fullpath }{ ld_separator }|.
+      ls_file_list-extension = ''.
+    ENDIF.
+    ls_file_list-create_date = ''.
+    ls_file_list-create_time = ''.
+    ls_file_list-change_date = ls_file-mod_date.
+    ls_file_list-change_time = ls_file-mod_time.
+    ls_file_list-chmod       = ls_file-mode.
+    APPEND ls_file_list TO et_file_list.
+  ENDDO.
+
+  call 'C_DIR_READ_FINISH'
+    id 'ERRNO'  field ld_errno
+    id 'ERRMSG' field ld_errmsg.
 endmethod.
 
 
