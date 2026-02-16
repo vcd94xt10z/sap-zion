@@ -39,8 +39,17 @@ public section.
       value(ID_PC_SHOW_PROGRESS) type FLAG
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
-  class-methods MOVE_FILE_FROM_PC_TO_SERVER .
-  class-methods SERVER_CREATE_FOLDER .
+  class-methods MOVE_FILE_FROM_PC_TO_SERVER
+    importing
+      value(ID_SERVER_FULLPATH) type ANY
+      value(ID_PC_FULLPATH) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods SERVER_CREATE_FOLDER
+    importing
+      value(ID_FOLDER) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
   class-methods SERVER_DELETE_FOLDER .
   class-methods SERVER_DELETE_FILE
     importing
@@ -48,6 +57,16 @@ public section.
     exporting
       value(ED_ERROR_MESSAGE) type ANY
       value(ED_SUBRC) type SYSUBRC .
+  class-methods SERVER_FOLDER_EXISTS
+    importing
+      value(ID_FOLDER) type ANY
+    returning
+      value(RD_BOOL) type ABAP_BOOL .
+  class-methods SERVER_FOLDER_CAN_WRITE
+    importing
+      value(ID_FOLDER) type ANY
+    returning
+      value(RD_BOOL) type ABAP_BOOL .
   class-methods PC_CREATE_FOLDER .
   class-methods PC_DELETE_FOLDER .
   class-methods PC_DELETE_FILE .
@@ -59,6 +78,11 @@ public section.
     exporting
       value(ED_FOLDER) type ANY
       value(ED_FILENAME) type ANY .
+  class-methods GET_PARENT_FOLDER
+    importing
+      value(ID_FOLDER) type ANY
+    exporting
+      value(ED_PARENT) type ANY .
 protected section.
 private section.
 ENDCLASS.
@@ -156,6 +180,83 @@ endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>GET_PARENT_FOLDER
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<---] ED_PARENT                      TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method GET_PARENT_FOLDER.
+  DATA: ld_size      TYPE int4.
+  DATA: ld_separator TYPE string.
+  DATA: lt_result    TYPE match_result_tab.
+  DATA: ls_result    LIKE LINE OF lt_result.
+  DATA: ld_string    TYPE string.
+  DATA: ld_offset    TYPE int4.
+  DATA: lt_string    TYPE STANDARD TABLE OF string.
+
+  CLEAR ed_parent.
+
+  IF id_folder = ''.
+    RETURN.
+  ENDIF.
+
+  " detectando separador
+  ld_separator = '/'.
+  IF id_folder CS '\\'.
+    ld_separator = '\\'.
+  ELSEIF id_folder CS '\'.
+    ld_separator = '\'.
+  ELSEIF id_folder CS '\\'.
+    ld_separator = '\\'.
+  ELSEIF id_folder CS '//'.
+    ld_separator = '//'.
+  ENDIF.
+
+  " root
+  IF id_folder = ld_separator.
+    ed_parent = id_folder.
+    RETURN.
+  ENDIF.
+
+  SPLIT id_folder AT ld_separator INTO TABLE lt_string.
+  ld_size = lines( lt_string ).
+  IF ld_size = 0 OR ld_size = 1.
+    ed_parent = id_folder.
+    RETURN.
+  ENDIF.
+
+  CLEAR lt_result.
+  FIND ALL OCCURRENCES OF ld_separator IN id_folder RESULTS lt_result.
+  ld_size = lines( lt_result ).
+
+  READ TABLE lt_result INTO ls_result INDEX ld_size.
+  IF sy-subrc <> 0.
+    RETURN.
+  ENDIF.
+
+  " verificando se o diretório termina com o separador
+  ld_offset = ls_result-offset + 1.
+  ld_string = id_folder+ld_offset.
+  IF ld_string = ''.
+    ld_size = ld_size - 1.
+    READ TABLE lt_result INTO ls_result INDEX ld_size.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+    IF ls_result-offset > 0.
+      ed_parent = id_folder(ls_result-offset).
+    ENDIF.
+  ELSE.
+    IF ls_result-offset > 0.
+      ed_parent = id_folder(ls_result-offset).
+    ENDIF.
+  ENDIF.
+
+  ed_parent = |{ ed_parent }{ ld_separator }|.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>LOAD_USER_TEXT_FILE
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] ID_FILE                        TYPE        STRING
@@ -180,9 +281,75 @@ endmethod.
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>MOVE_FILE_FROM_PC_TO_SERVER
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_SERVER_FULLPATH             TYPE        ANY
+* | [--->] ID_PC_FULLPATH                 TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method MOVE_FILE_FROM_PC_TO_SERVER.
-  endmethod.
+method MOVE_FILE_FROM_PC_TO_SERVER.
+  DATA: ld_server_fullpath(2048) TYPE c.
+  DATA: ld_pc_fullpath(2048)     TYPE c.
+  DATA: ld_size                  TYPE int4.
+  DATA: lt_data                  TYPE STANDARD TABLE OF tbl1024.
+  DATA: ld_data                  LIKE LINE OF lt_data.
+  DATA: ld_buffer_size           TYPE int4.
+  DATA: ld_rest                  TYPE int4.
+
+  CLEAR ed_error_message.
+
+  ld_pc_fullpath     = id_pc_fullpath.
+  ld_server_fullpath = id_server_fullpath.
+
+  " carregando dados para a memória
+  CLEAR ld_size.
+  CLEAR lt_data.
+  CALL FUNCTION 'SCMS_UPLOAD'
+    EXPORTING
+      filename = ld_pc_fullpath
+      binary   = 'X'
+      frontend = 'X'
+    IMPORTING
+      filesize = ld_size
+    TABLES
+      data     = lt_data
+    EXCEPTIONS
+      error    = 1
+      others   = 2.
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid
+       TYPE sy-msgty
+     NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+    RETURN.
+  ENDIF.
+
+  " gravando arquivo no servidor
+  OPEN DATASET id_server_fullpath FOR OUTPUT IN BINARY MODE.
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro ao abrir arquivo para gravação'.
+    RETURN.
+  ENDIF.
+
+  ld_buffer_size = 1024.
+  ld_rest        = ld_size.
+
+  LOOP AT lt_data INTO ld_data.
+    IF ld_rest = 0.
+      EXIT.
+    ENDIF.
+
+    IF ld_rest < ld_buffer_size.
+      TRANSFER ld_data TO id_server_fullpath LENGTH ld_rest.
+      ld_rest = 0.
+    ELSE.
+      TRANSFER ld_data TO id_server_fullpath LENGTH ld_buffer_size.
+      ld_rest = ld_rest - ld_buffer_size.
+    ENDIF.
+  ENDLOOP.
+
+  CLOSE DATASET id_server_fullpath.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -384,9 +551,46 @@ endmethod.
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>SERVER_CREATE_FOLDER
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method SERVER_CREATE_FOLDER.
-  endmethod.
+method SERVER_CREATE_FOLDER.
+  DATA: ld_dirname TYPE branint-dirname.
+
+  CLEAR ed_error_message.
+
+  IF id_folder = ''.
+    ed_error_message = 'Diretório vazio'.
+    RETURN.
+  ENDIF.
+
+  ld_dirname = id_folder.
+
+  TRY.
+    CALL FUNCTION 'BRAN_DIR_CREATE'
+      EXPORTING
+        dirname        = ld_dirname
+      EXCEPTIONS
+        already_exists = 1
+        cant_create    = 2
+        error_message  = 3
+        others         = 4.
+  CATCH cx_root.
+  ENDTRY.
+
+  CASE sy-subrc.
+    WHEN 0.
+      ed_error_message = ''.
+    WHEN 1.
+      ed_error_message = 'O diretório já existe'.
+    WHEN 2.
+      ed_error_message = 'Não é possível criar o diretório'.
+    WHEN 3.
+      ed_error_message = 'Erro ao criar diretório'.
+    WHEN OTHERS.
+      ed_error_message = 'Erro desconhecido ao criar diretório'.
+  ENDCASE.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -421,6 +625,79 @@ endmethod.
 * +--------------------------------------------------------------------------------------</SIGNATURE>
   method SERVER_DELETE_FOLDER.
   endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_FOLDER_CAN_WRITE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<-()] RD_BOOL                        TYPE        ABAP_BOOL
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_FOLDER_CAN_WRITE.
+  DATA: ld_file TYPE string.
+
+  rd_bool = abap_false.
+
+  ld_file = |{ id_folder }temp_file_{ sy-datum }{ sy-uzeit }{ sy-uname }.tmp|.
+
+  " tentando criar o arquivo
+  OPEN DATASET ld_file FOR INPUT IN TEXT MODE ENCODING DEFAULT.
+  IF sy-subrc <> 0.
+    RETURN.
+  ENDIF.
+
+  TRANSFER 'Teste' TO ld_file.
+  IF sy-subrc <> 0.
+    CLOSE DATASET ld_file.
+    RETURN.
+  ENDIF.
+
+  CLOSE DATASET ld_file.
+
+  " deletando arquivo temporário
+  DELETE DATASET ld_file.
+  IF sy-subrc <> 0.
+    CLOSE DATASET ld_file.
+    RETURN.
+  ENDIF.
+
+  rd_bool = abap_true.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_FOLDER_EXISTS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<-()] RD_BOOL                        TYPE        ABAP_BOOL
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_FOLDER_EXISTS.
+  DATA: ld_directory TYPE btch0000-text80.
+
+  IF id_folder = ''.
+    rd_bool = abap_false.
+    RETURN.
+  ENDIF.
+
+  ld_directory = id_folder.
+
+  CALL FUNCTION 'PFL_CHECK_DIRECTORY'
+   EXPORTING
+     DIRECTORY                         = ld_directory
+   EXCEPTIONS
+     pfl_dir_not_exist           = 1
+     pfl_permission_denied       = 2
+     pfl_cant_build_dataset_name = 3
+     pfl_file_not_exist          = 4
+     pfl_authorization_missing   = 5
+     others                      = 6.
+
+  IF sy-subrc = 0.
+    rd_bool = abap_true.
+  ELSE.
+    rd_bool = abap_false.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
