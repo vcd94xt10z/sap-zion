@@ -1,7 +1,7 @@
 *
 * Autor Vinicius Cesar Dias
 * Projeto https://github.com/vcd94xt10z/sap-zion
-* Versão 0.2 16/02/2026
+* Versão 0.3 16/02/2026
 *
 class ZCL_FILE_UTILS definition
   public
@@ -26,18 +26,6 @@ public section.
   types:
     my_file_t TYPE STANDARD TABLE OF my_file .
 
-  class-methods REQUEST_USER_FILE
-    importing
-      value(ID_DEFAULT_FILENAME) type ANY optional
-      value(ID_DEFAULT_EXTENSION) type ANY optional
-      value(ID_FILE_FILTER) type ANY optional
-    returning
-      value(RD_FILE) type STRING .
-  class-methods LOAD_USER_TEXT_FILE
-    importing
-      !ID_FILE type STRING
-    returning
-      value(RD_CONTENT) type STRING .
   class-methods DOWNLOAD_USER_BIN_FILE
     importing
       !ID_FILE type ANY
@@ -49,6 +37,27 @@ public section.
       value(ID_FILENAME) type ANY
     returning
       value(RD_EXTENSION) type STRING .
+  class-methods GET_FOLDER_SEPARATOR
+    importing
+      !ID_FOLDER type STRING
+    returning
+      value(RD_SEPARATOR) type STRING .
+  class-methods GET_PARENT_FOLDER
+    importing
+      value(ID_FOLDER) type ANY
+    exporting
+      value(ED_PARENT) type ANY .
+  class-methods LOAD_USER_TEXT_FILE
+    importing
+      !ID_FILE type STRING
+    returning
+      value(RD_CONTENT) type STRING .
+  class-methods MOVE_FILE_FROM_PC_TO_SERVER
+    importing
+      value(ID_SERVER_FULLPATH) type ANY
+      value(ID_PC_FULLPATH) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
   class-methods MOVE_FILE_FROM_SERVER_TO_PC
     importing
       value(ID_SERVER_FULLPATH) type ANY
@@ -56,30 +65,57 @@ public section.
       value(ID_PC_SHOW_PROGRESS) type FLAG
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
-  class-methods MOVE_FILE_FROM_PC_TO_SERVER
+  class-methods PC_CREATE_FOLDER
     importing
-      value(ID_SERVER_FULLPATH) type ANY
-      value(ID_PC_FULLPATH) type ANY
+      value(ID_FOLDER) type ANY
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_DELETE_FILE
+    importing
+      value(ID_FULLPATH) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_DELETE_FOLDER
+    importing
+      value(ID_FOLDER) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_MOVE_FILE
+    importing
+      value(ID_FROM) type ANY
+      value(ID_TO) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods REQUEST_USER_FILE
+    importing
+      value(ID_DEFAULT_FILENAME) type ANY optional
+      value(ID_DEFAULT_EXTENSION) type ANY optional
+      value(ID_FILE_FILTER) type ANY optional
+    returning
+      value(RD_FILE) type STRING .
   class-methods SERVER_CREATE_FOLDER
     importing
       value(ID_FOLDER) type ANY
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
-  class-methods SERVER_DELETE_FOLDER .
   class-methods SERVER_DELETE_FILE
     importing
       value(ID_FULLPATH) type ANY
     exporting
       value(ED_ERROR_MESSAGE) type ANY
       value(ED_SUBRC) type SYSUBRC .
-  class-methods SERVER_FOLDER_EXISTS
+  class-methods SERVER_DELETE_FOLDER
+    importing
+      value(ID_FULLPATH) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY
+      value(ED_SUBRC) type SYSUBRC .
+  class-methods SERVER_FOLDER_CAN_WRITE
     importing
       value(ID_FOLDER) type ANY
     returning
       value(RD_BOOL) type ABAP_BOOL .
-  class-methods SERVER_FOLDER_CAN_WRITE
+  class-methods SERVER_FOLDER_EXISTS
     importing
       value(ID_FOLDER) type ANY
     returning
@@ -90,27 +126,18 @@ public section.
     exporting
       value(ET_FILE_LIST) type MY_FILE_T
       value(ED_ERROR_MESSAGE) type STRING .
-  class-methods PC_CREATE_FOLDER .
-  class-methods PC_DELETE_FOLDER .
-  class-methods PC_DELETE_FILE .
-  class-methods SERVER_MOVE_FILE .
-  class-methods PC_MOVE_FILE .
+  class-methods SERVER_MOVE_FILE
+    importing
+      value(ID_FROM) type ANY
+      value(ID_TO) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
   class-methods SPLIT_FOLDER_FILENAME
     importing
       value(ID_FULLPATH) type ANY
     exporting
       value(ED_FOLDER) type ANY
       value(ED_FILENAME) type ANY .
-  class-methods GET_PARENT_FOLDER
-    importing
-      value(ID_FOLDER) type ANY
-    exporting
-      value(ED_PARENT) type ANY .
-  class-methods GET_FOLDER_SEPARATOR
-    importing
-      !ID_FOLDER type STRING
-    returning
-      value(RD_SEPARATOR) type STRING .
 protected section.
 private section.
 ENDCLASS.
@@ -318,7 +345,9 @@ method LOAD_USER_TEXT_FILE.
       data_tab = lt_content.
 
   IF lines( lt_content ) > 0.
-    CONCATENATE LINES OF lt_content INTO rd_content SEPARATED BY cl_abap_char_utilities=>newline.
+    CONCATENATE LINES OF lt_content
+           INTO rd_content
+   SEPARATED BY cl_abap_char_utilities=>newline.
   ENDIF.
 endmethod.
 
@@ -520,33 +549,201 @@ endmethod.
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_CREATE_FOLDER
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method PC_CREATE_FOLDER.
-  endmethod.
+method PC_CREATE_FOLDER.
+  DATA: ld_rc TYPE int4.
+
+  CLEAR ed_error_message.
+
+  IF id_folder = ''.
+    ed_error_message = 'Diretório vazio'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>directory_create(
+    EXPORTING
+      directory                = id_folder
+    CHANGING
+      rc                       = ld_rc
+    EXCEPTIONS
+      directory_create_failed  = 1                " Could not create directory
+      cntl_error               = 2                " A Control Error Occurred
+      error_no_gui             = 3                " No GUI available
+      directory_access_denied  = 4                " Access denied
+      directory_already_exists = 5                " Directory already exists
+      path_not_found           = 6                " Path does not exist
+      unknown_error            = 7                " Unknown error
+      not_supported_by_gui     = 8                " GUI does not support this
+      wrong_parameter          = 9                " Wrong parameter
+      others                   = 10
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_DELETE_FILE
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method PC_DELETE_FILE.
-  endmethod.
+method PC_DELETE_FILE.
+  DATA: ld_rc TYPE int4.
+
+  CLEAR ed_error_message.
+
+  IF id_fullpath = ''.
+    ed_error_message = 'Diretório vazio'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>file_delete(
+    EXPORTING
+      filename             = id_fullpath
+    CHANGING
+      rc                   = ld_rc
+    EXCEPTIONS
+      file_delete_failed   = 1                " Could not delete file
+      cntl_error           = 2                " Control error
+      error_no_gui         = 3                " Error: No GUI
+      file_not_found       = 4                " File not found
+      access_denied        = 5                " Access denied
+      unknown_error        = 6                " Unknown error
+      not_supported_by_gui = 7                " GUI does not support this
+      wrong_parameter      = 8                " Wrong parameter
+      others               = 9
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_DELETE_FOLDER
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FOLDER                      TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method PC_DELETE_FOLDER.
-  endmethod.
+method PC_DELETE_FOLDER.
+  DATA: ld_rc TYPE int4.
+
+  CLEAR ed_error_message.
+
+  IF id_folder = ''.
+    ed_error_message = 'Diretório vazio'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>directory_delete(
+    EXPORTING
+      directory               = id_folder
+    CHANGING
+      rc                      = ld_rc
+    EXCEPTIONS
+      directory_delete_failed = 1                " Could not delete directory
+      cntl_error              = 2                " Control error
+      error_no_gui            = 3                " No GUI available
+      path_not_found          = 4                " Path not found
+      directory_access_denied = 5                " Access denied
+      unknown_error           = 6                " Unknown error
+      not_supported_by_gui    = 7                " GUI does not support this
+      wrong_parameter         = 8                " Wrong parameter
+      others                  = 9
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_MOVE_FILE
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FROM                        TYPE        ANY
+* | [--->] ID_TO                          TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method PC_MOVE_FILE.
-  endmethod.
+method PC_MOVE_FILE.
+  DATA: ld_rc TYPE int4.
+
+  CLEAR ed_error_message.
+
+  IF id_from = ''.
+    ed_error_message = 'Arquivo origem vazio'.
+    RETURN.
+  ENDIF.
+
+  IF id_to = ''.
+    ed_error_message = 'Arquivo destino vazio'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>file_copy(
+    EXPORTING
+      source               = id_from
+      destination          = id_to
+*      overwrite            = space            " Overrides if Destination Exists
+    EXCEPTIONS
+      cntl_error           = 1                " Control error
+      error_no_gui         = 2                " No GUI Available
+      wrong_parameter      = 3                " Incorrect parameter
+      disk_full            = 4                " Disk full
+      access_denied        = 5                " Access Denied to Source or Destination File
+      file_not_found       = 6                " Source File not Found
+      destination_exists   = 7                " Destination Already Exists
+      unknown_error        = 8                " Unknown error
+      path_not_found       = 9                " Path to Which You Want to Copy File(s) Does not Exist
+      disk_write_protect   = 10               " Disk Is Write-Protected
+      drive_not_ready      = 11               " Disk drive not ready
+      not_supported_by_gui = 12               " GUI does not support this
+      others               = 13
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>file_delete(
+    EXPORTING
+      filename             = id_from
+    CHANGING
+      rc                   = ld_rc
+    EXCEPTIONS
+      file_delete_failed   = 1                " Could not delete file
+      cntl_error           = 2                " Control error
+      error_no_gui         = 3                " Error: No GUI
+      file_not_found       = 4                " File not found
+      access_denied        = 5                " Access denied
+      unknown_error        = 6                " Unknown error
+      not_supported_by_gui = 7                " GUI does not support this
+      wrong_parameter      = 8                " Wrong parameter
+      others               = 9
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+    RETURN.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -600,7 +797,7 @@ endmethod.
 * | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
 method SERVER_CREATE_FOLDER.
-  DATA: ld_dirname TYPE branint-dirname.
+  DATA: ld_command1(70) TYPE c.
 
   CLEAR ed_error_message.
 
@@ -609,32 +806,13 @@ method SERVER_CREATE_FOLDER.
     RETURN.
   ENDIF.
 
-  ld_dirname = id_folder.
+  ld_command1 = |mkdir -p { id_folder }|.
 
-  TRY.
-    CALL FUNCTION 'BRAN_DIR_CREATE'
-      EXPORTING
-        dirname        = ld_dirname
-      EXCEPTIONS
-        already_exists = 1
-        cant_create    = 2
-        error_message  = 3
-        others         = 4.
-  CATCH cx_root.
-  ENDTRY.
+  CALL 'SYSTEM' ID 'COMMAND' FIELD ld_command1.
 
-  CASE sy-subrc.
-    WHEN 0.
-      ed_error_message = ''.
-    WHEN 1.
-      ed_error_message = 'O diretório já existe'.
-    WHEN 2.
-      ed_error_message = 'Não é possível criar o diretório'.
-    WHEN 3.
-      ed_error_message = 'Erro ao criar diretório'.
-    WHEN OTHERS.
-      ed_error_message = 'Erro desconhecido ao criar diretório'.
-  ENDCASE.
+  IF server_folder_exists( id_folder = id_folder ) = abap_false.
+    ed_error_message = 'Erro ao criar diretório'.
+  ENDIF.
 endmethod.
 
 
@@ -667,9 +845,43 @@ endmethod.
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>SERVER_DELETE_FOLDER
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* | [<---] ED_SUBRC                       TYPE        SYSUBRC
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method SERVER_DELETE_FOLDER.
-  endmethod.
+method SERVER_DELETE_FOLDER.
+  DATA: lt_file         TYPE my_file_t.
+  DATA: ld_command1(70) TYPE c.
+
+  CLEAR ed_error_message.
+
+  IF id_fullpath = ''.
+    ed_error_message = 'Arquivo vazio'.
+    RETURN.
+  ENDIF.
+
+  CLEAR lt_file.
+  server_list_folder(
+    EXPORTING
+      id_folder    = id_fullpath
+    IMPORTING
+      et_file_list = lt_file
+  ).
+  IF lines( lt_file ) > 0.
+    ed_error_message = 'O diretório não esta vazio'.
+    RETURN.
+  ENDIF.
+
+  CLEAR ed_error_message.
+
+  ld_command1 = |rmdir { id_fullpath }|.
+
+  CALL 'SYSTEM' ID 'COMMAND' FIELD ld_command1.
+
+  IF server_folder_exists( id_folder = id_fullpath ) = abap_true.
+    ed_error_message = 'Erro ao deletar diretório'.
+  ENDIF.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -798,12 +1010,11 @@ method SERVER_LIST_FOLDER.
 
   ld_folder = id_folder.
 
-  get_folder_separator(
+  CALL METHOD zcl_file_utils=>get_folder_separator
     EXPORTING
-      id_folder    = id_folder
+      id_folder    = CONV string( id_folder )
     RECEIVING
-      rd_separator = ld_separator
-  ).
+      rd_separator = ld_separator.
 
   " garantindo que não tenha nenhuma solicitação anterior em aberto
   call 'C_DIR_READ_FINISH'
@@ -954,9 +1165,44 @@ endmethod.
 * <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>SERVER_MOVE_FILE
 * +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FROM                        TYPE        ANY
+* | [--->] ID_TO                          TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
-  method SERVER_MOVE_FILE.
-  endmethod.
+method SERVER_MOVE_FILE.
+  DATA: ld_line(1024) TYPE x.
+
+  CLEAR ed_error_message.
+
+  OPEN DATASET id_from FOR INPUT IN BINARY MODE.
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro ao abrir arquivo para leitura'.
+    RETURN.
+  ENDIF.
+
+  OPEN DATASET id_to FOR OUTPUT IN BINARY MODE.
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro ao abrir arquivo para gravação'.
+    RETURN.
+  ENDIF.
+
+  DO.
+    READ DATASET id_from INTO ld_line.
+    IF sy-subrc EQ 0.
+      TRANSFER ld_line TO id_to.
+    ELSE.
+      IF ld_line IS NOT INITIAL.
+        TRANSFER ld_line TO id_to.
+      ENDIF.
+      EXIT.
+    ENDIF.
+  ENDDO.
+
+  DELETE DATASET id_from.
+
+  CLOSE DATASET id_to.
+  CLOSE DATASET id_from.
+endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
