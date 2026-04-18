@@ -10,6 +10,10 @@ class ZCL_FILE_UTILS definition
 public section.
 
   types:
+    my_string_tab  TYPE STANDARD TABLE OF string .
+  types:
+    my_xstring_tab TYPE STANDARD TABLE OF xstring .
+  types:
     BEGIN OF MY_FILE
        , filename    TYPE string
        , fullpath    TYPE string
@@ -65,6 +69,17 @@ public section.
       value(ID_PC_SHOW_PROGRESS) type FLAG
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_BINARY_TO_FILE
+    importing
+      value(ID_FULLPATH) type ANY
+      value(ID_CONTENT) type XSTRING optional
+      value(IT_CONTENT) type STANDARD TABLE optional
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_BINARY_TO_FILE_TEST
+    importing
+      value(ID_PC_INPUT_FULLPATH) type ANY
+      value(ID_PC_OUTPUT_FULLPATH) type ANY .
   class-methods PC_CREATE_FOLDER
     importing
       value(ID_FOLDER) type ANY
@@ -80,10 +95,25 @@ public section.
       value(ID_FOLDER) type ANY
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_FILE_TO_BINARY
+    importing
+      value(ID_FULLPATH) type ANY
+    exporting
+      value(ED_CONTENT) type XSTRING
+      value(ET_CONTENT) type MY_XSTRING_TAB
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_FILE_TO_TEXT .
   class-methods PC_MOVE_FILE
     importing
       value(ID_FROM) type ANY
       value(ID_TO) type ANY
+    exporting
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods PC_TEXT_TO_FILE
+    importing
+      value(ID_FULLPATH) type ANY
+      value(ID_TEXT) type ANY optional
+      value(IT_TEXT) type STANDARD TABLE optional
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
   class-methods REQUEST_USER_FILE
@@ -93,6 +123,7 @@ public section.
       value(ID_FILE_FILTER) type ANY optional
     returning
       value(RD_FILE) type STRING .
+  class-methods SERVER_BINARY_TO_FILE .
   class-methods SERVER_CREATE_FOLDER
     importing
       value(ID_FOLDER) type ANY
@@ -110,6 +141,20 @@ public section.
     exporting
       value(ED_ERROR_MESSAGE) type ANY
       value(ED_SUBRC) type SYSUBRC .
+  class-methods SERVER_FILE_TO_BINARY
+    importing
+      value(ID_FULLPATH) type ANY
+    exporting
+      value(ET_CONTENT) type STANDARD TABLE
+      value(ED_CONTENT) type ANY
+      value(ED_ERROR_MESSAGE) type ANY .
+  class-methods SERVER_FILE_TO_TEXT
+    importing
+      value(ID_FULLPATH) type ANY
+    exporting
+      value(ET_CONTENT) type STANDARD TABLE
+      value(ED_CONTENT) type ANY
+      value(ED_ERROR_MESSAGE) type ANY .
   class-methods SERVER_FOLDER_CAN_WRITE
     importing
       value(ID_FOLDER) type ANY
@@ -132,12 +177,18 @@ public section.
       value(ID_TO) type ANY
     exporting
       value(ED_ERROR_MESSAGE) type ANY .
+  class-methods SERVER_TEXT_TO_FILE .
   class-methods SPLIT_FOLDER_FILENAME
     importing
       value(ID_FULLPATH) type ANY
     exporting
       value(ED_FOLDER) type ANY
       value(ED_FILENAME) type ANY .
+  class-methods XSTRING_TO_STRING
+    importing
+      value(ID_XSTRING) type XSTRING
+    returning
+      value(RD_STRING) type STRING .
 protected section.
 private section.
 ENDCLASS.
@@ -547,6 +598,111 @@ endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>PC_BINARY_TO_FILE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [--->] ID_CONTENT                     TYPE        XSTRING(optional)
+* | [--->] IT_CONTENT                     TYPE        STANDARD TABLE(optional)
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method PC_BINARY_TO_FILE.
+  DATA: ld_filesize TYPE int4.
+  DATA: lt_xstring  TYPE STANDARD TABLE OF xstring.
+  DATA: ld_xstring  TYPE xstring.
+
+  CLEAR lt_xstring.
+  CLEAR ed_error_message.
+
+  IF id_content IS SUPPLIED AND id_content IS NOT INITIAL.
+    APPEND id_content TO lt_xstring.
+  ENDIF.
+
+  LOOP AT it_content INTO ld_xstring.
+    APPEND ld_xstring TO lt_xstring.
+  ENDLOOP.
+
+  IF lines( lt_xstring ) <= 0.
+    ed_error_message = 'Nenhum conteúdo informado'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>gui_download(
+    EXPORTING
+      bin_filesize              = ld_filesize
+      filename                  = CONV string( id_fullpath )
+      filetype                  = 'BIN'                " File type (ASCII, binary ...)
+      confirm_overwrite         = space                " Overwrite File Only After Confirmation
+      no_auth_check             = space                " Switch off Check for Access Rights
+      show_transfer_status      = 'X'                  " Enables suppression of transfer status message
+    CHANGING
+      data_tab                  = lt_xstring
+    EXCEPTIONS
+      file_write_error          = 1                    " Cannot write to file
+      no_batch                  = 2                    " Front-End Function Cannot Be Executed in Backgrnd
+      gui_refuse_filetransfer   = 3                    " Incorrect Front End
+      invalid_type              = 4                    " Invalid value for parameter FILETYPE
+      no_authority              = 5                    " No Download Authorization
+      unknown_error             = 6                    " Unknown error
+      header_not_allowed        = 7                    " Invalid header
+      separator_not_allowed     = 8                    " Invalid separator
+      filesize_not_allowed      = 9                    " Invalid file size
+      header_too_long           = 10                   " Header information currently restricted to 1023 bytes
+      dp_error_create           = 11                   " Cannot create DataProvider
+      dp_error_send             = 12                   " Error Sending Data with DataProvider
+      dp_error_write            = 13                   " Error Writing Data with DataProvider
+      unknown_dp_error          = 14                   " Error when calling data provider
+      access_denied             = 15                   " Access to File Denied
+      dp_out_of_memory          = 16                   " Not Enough Memory in DataProvider
+      disk_full                 = 17                   " Storage Medium full
+      dp_timeout                = 18                   " Timeout of DataProvider
+      file_not_found            = 19                   " Could not find file
+      dataprovider_exception    = 20                   " General Exception Error in DataProvider
+      control_flush_error       = 21                   " Error in Control Framework
+      not_supported_by_gui      = 22                   " GUI does not support this
+      error_no_gui              = 23                   " GUI not available
+      others                    = 24
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+  ENDIF.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>PC_BINARY_TO_FILE_TEST
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_PC_INPUT_FULLPATH           TYPE        ANY
+* | [--->] ID_PC_OUTPUT_FULLPATH          TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method PC_BINARY_TO_FILE_TEST.
+  DATA: ld_error_message TYPE string.
+  DATA: ld_content       TYPE xstring.
+  DATA: lt_content       TYPE STANDARD TABLE OF xstring.
+
+  pc_file_to_binary(
+    EXPORTING
+      id_fullpath      = id_pc_input_fullpath
+    IMPORTING
+      ed_content       = ld_content
+      et_content       = lt_content
+      ed_error_message = ld_error_message
+  ).
+
+  pc_binary_to_file(
+    EXPORTING
+      id_fullpath      = id_pc_output_fullpath
+      id_content       = ld_content
+      "it_content       =
+    IMPORTING
+      ed_error_message = ld_error_message
+  ).
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_CREATE_FOLDER
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] ID_FOLDER                      TYPE        ANY
@@ -671,6 +827,66 @@ endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>PC_FILE_TO_BINARY
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [<---] ED_CONTENT                     TYPE        XSTRING
+* | [<---] ET_CONTENT                     TYPE        MY_XSTRING_TAB
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method PC_FILE_TO_BINARY.
+  DATA: ld_filesize TYPE int4.
+
+  CLEAR ed_content.
+  CLEAR et_content.
+
+  cl_gui_frontend_services=>gui_upload(
+    EXPORTING
+      filename                = id_fullpath
+      filetype                = 'BIN'           " File Type (ASCII, Binary)
+    IMPORTING
+      filelength              = ld_filesize      " File Length
+    CHANGING
+      data_tab                = et_content
+    EXCEPTIONS
+      file_open_error         = 1                " File does not exist and cannot be opened
+      file_read_error         = 2                " Error when reading file
+      no_batch                = 3                " Front-End Function Cannot Be Executed in Backgrnd
+      gui_refuse_filetransfer = 4                " Incorrect front end or error on front end
+      invalid_type            = 5                " Incorrect parameter FILETYPE
+      no_authority            = 6                " No Upload Authorization
+      unknown_error           = 7                " Unknown error
+      bad_data_format         = 8                " Cannot Interpret Data in File
+      header_not_allowed      = 9                " Invalid header
+      separator_not_allowed   = 10               " Invalid separator
+      header_too_long         = 11               " Header information currently restricted to 1023 bytes
+      unknown_dp_error        = 12               " Error when calling data provider
+      access_denied           = 13               " Access to File Denied
+      dp_out_of_memory        = 14               " Not Enough Memory in DataProvider
+      disk_full               = 15               " Storage Medium full
+      dp_timeout              = 16               " Timeout of DataProvider
+      not_supported_by_gui    = 17               " GUI does not support this
+      error_no_gui            = 18               " GUI not available
+      others                  = 19
+  ).
+
+  IF sy-subrc <> 0.
+   MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+     WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+     INTO ed_error_message.
+  ENDIF.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>PC_FILE_TO_TEXT
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method PC_FILE_TO_TEXT.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>PC_MOVE_FILE
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] ID_FROM                        TYPE        ANY
@@ -747,6 +963,81 @@ endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>PC_TEXT_TO_FILE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [--->] ID_TEXT                        TYPE        ANY(optional)
+* | [--->] IT_TEXT                        TYPE        STANDARD TABLE(optional)
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method PC_TEXT_TO_FILE.
+  DATA: lt_text TYPE STANDARD TABLE OF string.
+  DATA: ld_text TYPE string.
+
+  CLEAR ed_error_message.
+
+  CLEAR lt_text.
+
+  IF id_text IS SUPPLIED AND id_text IS NOT INITIAL.
+    APPEND id_text TO lt_text.
+  ENDIF.
+
+  IF it_text IS SUPPLIED AND lines( it_text ) > 0.
+    LOOP AT it_text INTO ld_text.
+      APPEND ld_text TO lt_text.
+    ENDLOOP.
+  ENDIF.
+
+  IF lines( lt_text ) <= 0.
+    ed_error_message = 'Nenhum texto informado'.
+    RETURN.
+  ENDIF.
+
+  cl_gui_frontend_services=>gui_download(
+    EXPORTING
+      filename                  = CONV string( id_fullpath )
+      filetype                  = 'ASC'                " File type (ASCII, binary ...)
+      confirm_overwrite         = space                " Overwrite File Only After Confirmation
+      no_auth_check             = space                " Switch off Check for Access Rights
+      show_transfer_status      = 'X'                  " Enables suppression of transfer status message
+    CHANGING
+      data_tab                  = lt_text
+    EXCEPTIONS
+      file_write_error          = 1                    " Cannot write to file
+      no_batch                  = 2                    " Front-End Function Cannot Be Executed in Backgrnd
+      gui_refuse_filetransfer   = 3                    " Incorrect Front End
+      invalid_type              = 4                    " Invalid value for parameter FILETYPE
+      no_authority              = 5                    " No Download Authorization
+      unknown_error             = 6                    " Unknown error
+      header_not_allowed        = 7                    " Invalid header
+      separator_not_allowed     = 8                    " Invalid separator
+      filesize_not_allowed      = 9                    " Invalid file size
+      header_too_long           = 10                   " Header information currently restricted to 1023 bytes
+      dp_error_create           = 11                   " Cannot create DataProvider
+      dp_error_send             = 12                   " Error Sending Data with DataProvider
+      dp_error_write            = 13                   " Error Writing Data with DataProvider
+      unknown_dp_error          = 14                   " Error when calling data provider
+      access_denied             = 15                   " Access to File Denied
+      dp_out_of_memory          = 16                   " Not Enough Memory in DataProvider
+      disk_full                 = 17                   " Storage Medium full
+      dp_timeout                = 18                   " Timeout of DataProvider
+      file_not_found            = 19                   " Could not find file
+      dataprovider_exception    = 20                   " General Exception Error in DataProvider
+      control_flush_error       = 21                   " Error in Control Framework
+      not_supported_by_gui      = 22                   " GUI does not support this
+      error_no_gui              = 23                   " GUI not available
+      others                    = 24
+  ).
+
+  IF sy-subrc <> 0.
+    MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4
+       INTO ed_error_message.
+  ENDIF.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>REQUEST_USER_FILE
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] ID_DEFAULT_FILENAME            TYPE        ANY(optional)
@@ -788,6 +1079,14 @@ method REQUEST_USER_FILE.
     ENDIF.
   ENDIF.
 endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_BINARY_TO_FILE
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method SERVER_BINARY_TO_FILE.
+  endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
@@ -881,6 +1180,111 @@ method SERVER_DELETE_FOLDER.
   IF server_folder_exists( id_folder = id_fullpath ) = abap_true.
     ed_error_message = 'Erro ao deletar diretório'.
   ENDIF.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_FILE_TO_BINARY
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [<---] ET_CONTENT                     TYPE        STANDARD TABLE
+* | [<---] ED_CONTENT                     TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_FILE_TO_BINARY.
+  DATA: ld_line  TYPE xstring.
+  DATA: lv_msgv1 LIKE sy-msgv1.
+
+  CLEAR ed_error_message.
+
+  IF id_fullpath = ''.
+    ed_error_message = 'Caminho do arquivo vazio'.
+    RETURN.
+  ENDIF.
+
+  OPEN DATASET id_fullpath FOR INPUT IN BINARY MODE MESSAGE lv_msgv1.
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro ao abrir arquivo para leitura'.
+    RETURN.
+  ENDIF.
+
+  DO.
+    READ DATASET id_fullpath INTO ld_line MAXIMUM LENGTH 1024.
+    IF sy-subrc EQ 0.
+      CONCATENATE ed_content ld_line INTO ed_content IN BYTE MODE.
+      APPEND ld_line TO et_content.
+    ELSE.
+      IF ld_line IS NOT INITIAL.
+        CONCATENATE ed_content ld_line INTO ed_content IN BYTE MODE.
+        APPEND ld_line TO et_content.
+      ENDIF.
+      EXIT.
+    ENDIF.
+  ENDDO.
+
+  CLOSE DATASET id_fullpath.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_FILE_TO_TEXT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [<---] ET_CONTENT                     TYPE        STANDARD TABLE
+* | [<---] ED_CONTENT                     TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_FILE_TO_TEXT.
+  DATA: ld_line(1024) TYPE c.
+  DATA: lv_msgv1      LIKE sy-msgv1.
+  DATA: ld_length     TYPE int4.
+
+  CLEAR ed_error_message.
+
+  IF id_fullpath = ''.
+    ed_error_message = 'Caminho do arquivo vazio'.
+    RETURN.
+  ENDIF.
+
+  OPEN DATASET id_fullpath
+   FOR INPUT
+    IN TEXT MODE
+    ENCODING UTF-8
+    MESSAGE lv_msgv1.
+    "IGNORING CONVERSION ERRORS
+    "REPLACEMENT CHARACTER '#'.
+
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro ao abrir arquivo para leitura'.
+    RETURN.
+  ENDIF.
+
+  DO.
+    TRY.
+      CLEAR ld_line.
+
+      READ DATASET id_fullpath
+      INTO ld_line
+      MAXIMUM LENGTH 1024
+      ACTUAL LENGTH ld_length.
+    CATCH cx_root.
+    ENDTRY.
+
+    IF sy-subrc EQ 0.
+      APPEND ld_line TO et_content.
+    ELSE.
+      IF ld_line IS NOT INITIAL.
+        APPEND ld_line TO et_content.
+      ENDIF.
+      EXIT.
+    ENDIF.
+  ENDDO.
+
+  CLOSE DATASET id_fullpath.
+
+  CONCATENATE LINES OF et_content
+         INTO ed_content
+ SEPARATED BY cl_abap_char_utilities=>newline.
 endmethod.
 
 
@@ -1206,6 +1610,14 @@ endmethod.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_TEXT_TO_FILE
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  method SERVER_TEXT_TO_FILE.
+  endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
 * | Static Public Method ZCL_FILE_UTILS=>SPLIT_FOLDER_FILENAME
 * +-------------------------------------------------------------------------------------------------+
 * | [--->] ID_FULLPATH                    TYPE        ANY
@@ -1250,5 +1662,22 @@ method SPLIT_FOLDER_FILENAME.
   ld_index         = ls_result-offset + 1.
   ed_folder        = id_fullpath(ld_index).
   ed_filename      = id_fullpath+ld_index.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>XSTRING_TO_STRING
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_XSTRING                     TYPE        XSTRING
+* | [<-()] RD_STRING                      TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method XSTRING_TO_STRING.
+  TRY.
+    rd_string = cl_abap_codepage=>convert_from(
+       source = id_xstring
+       codepage = 'UTF-8'
+    ).
+  CATCH cx_root.
+  ENDTRY.
 endmethod.
 ENDCLASS.
