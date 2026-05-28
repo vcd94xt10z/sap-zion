@@ -19,6 +19,7 @@ public section.
   class-methods XLS_TO_ITAB
     importing
       !XLS_FILE type STRING
+      value(IGNORE_NLINES) type INT4 default 1
       value(SERVER) type FLAG optional
     exporting
       !ITAB type STANDARD TABLE .
@@ -31,10 +32,21 @@ ENDCLASS.
 CLASS ZCL_XLS_UTILS IMPLEMENTATION.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_XLS_UTILS=>CLASS_CONSTRUCTOR
+* +-------------------------------------------------------------------------------------------------+
+* +--------------------------------------------------------------------------------------</SIGNATURE>
 method CLASS_CONSTRUCTOR.
 endmethod.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_XLS_UTILS=>ITAB_TO_XLS
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ITAB                           TYPE        ANY TABLE
+* | [--->] XLS_FILE                       TYPE        STRING
+* | [--->] SERVER                         TYPE        FLAG(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
 method ITAB_TO_XLS.
   DATA: ld_bin_filesize TYPE int4.
   DATA: lt_bintab       TYPE solix_tab.
@@ -130,6 +142,14 @@ method ITAB_TO_XLS.
 endmethod.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_XLS_UTILS=>XLS_TO_ITAB
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] XLS_FILE                       TYPE        STRING
+* | [--->] IGNORE_NLINES                  TYPE        INT4 (default =1)
+* | [--->] SERVER                         TYPE        FLAG(optional)
+* | [<---] ITAB                           TYPE        STANDARD TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
 method XLS_TO_ITAB.
   DATA: lt_solix          TYPE w3mimetabtype.
   DATA: lo_excel          TYPE REF TO cl_fdt_xl_spreadsheet.
@@ -219,7 +239,7 @@ method XLS_TO_ITAB.
   " convertendo dados da tabela interna genérica para a tabela interna de saída
   LOOP AT <lt_worksheet> ASSIGNING <ls_worksheet>.
     " ignorando a linha de cabeçalho
-    IF sy-tabix = 1.
+    IF sy-tabix <= IGNORE_NLINES.
       CONTINUE.
     ENDIF.
 
