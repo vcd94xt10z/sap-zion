@@ -1,7 +1,7 @@
 *
 * Autor Vinicius Cesar Dias
 * Projeto https://github.com/vcd94xt10z/sap-zion
-* Versão 0.3 16/02/2026
+* Versão 0.4 27/06/2026
 *
 class ZCL_FILE_UTILS definition
   public
@@ -189,6 +189,18 @@ public section.
       value(ID_XSTRING) type XSTRING
     returning
       value(RD_STRING) type STRING .
+  class-methods SERVER_CONV_FILE_UTF16LE_TO_8
+    importing
+      !ID_FILE type ANY
+    exporting
+      !ED_ERROR_MESSAGE type STRING .
+  class-methods SERVER_FILE_HASH
+    importing
+      !ID_FULLPATH type ANY
+      value(ID_ALGORITHM) type STRING default 'MD5'
+    exporting
+      value(ED_HASH) type STRING
+      !ED_ERROR_MESSAGE type STRING .
 protected section.
 private section.
 ENDCLASS.
@@ -1679,5 +1691,125 @@ method XSTRING_TO_STRING.
     ).
   CATCH cx_root.
   ENDTRY.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_CONV_FILE_UTF16LE_TO_8
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FILE                        TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_CONV_FILE_UTF16LE_TO_8.
+  DATA: ld_linha      TYPE string,
+        ld_arquivo    TYPE string,
+        lt_arquivo    TYPE TABLE OF string,
+        ld_file_xstr  TYPE xstring,
+        lo_conv       TYPE REF TO cl_abap_conv_in_ce.
+
+  " Sintaxe tradicional para obter o Carriage Return (CR)
+  DATA: ld_cr_hex TYPE x LENGTH 2 VALUE '000D',
+        lc_cr     TYPE string.
+
+  CLEAR ed_error_message.
+
+  FIELD-SYMBOLS: <fs_cr> TYPE c.
+  ASSIGN ld_cr_hex TO <fs_cr> CASTING TYPE c.
+  lc_cr = <fs_cr>.
+
+  ld_arquivo = id_file.
+
+  " 1. LER O ARQUIVO ORIGINAL EM MODO BINÁRIO
+  OPEN DATASET ld_arquivo FOR INPUT IN BINARY MODE.
+
+  IF sy-subrc <> 0.
+    ed_error_message = |Erro ao abrir o arquivo para leitura no servidor: { ld_arquivo }|.
+    RETURN.
+  ENDIF.
+
+  " Lemos todo o conteúdo bruto do arquivo para a variável xstring
+  READ DATASET ld_arquivo INTO ld_file_xstr.
+  CLOSE DATASET ld_arquivo.
+
+  IF ld_file_xstr IS INITIAL.
+    ed_error_message = |O arquivo está vazio no servidor: { ld_arquivo }|.
+    RETURN.
+  ENDIF.
+
+  " 2. CONVERTER DE UTF-16LE (4103) PARA A STRING INTERNA DO ABAP
+  TRY.
+      " CL_ABAP_CONV_IN_CE lida melhor com streams de arquivos do que a CL_ABAP_CONV_CODEPAGE
+      lo_conv = cl_abap_conv_in_ce=>create( encoding = '4103' input = ld_file_xstr ).
+      lo_conv->read( IMPORTING data = ld_linha ).
+
+      " Quebra o texto convertido em uma tabela de linhas
+      SPLIT ld_linha AT cl_abap_char_utilities=>newline INTO TABLE lt_arquivo.
+    CATCH cx_root.
+      ed_error_message = |Erro na conversão da Code Page 4103 (UTF-16LE).|.
+      RETURN.
+  ENDTRY.
+
+  " 3. SOBRESCREVER O MESMO ARQUIVO EM UTF-8
+  OPEN DATASET ld_arquivo FOR OUTPUT IN TEXT MODE ENCODING UTF-8.
+
+  IF sy-subrc <> 0.
+    ed_error_message = |Erro ao abrir o arquivo para sobrescrita no servidor: { ld_arquivo }|.
+    RETURN.
+  ENDIF.
+
+  LOOP AT lt_arquivo INTO ld_linha.
+    " Remove possíveis resíduos de Carriage Return
+    REPLACE ALL OCCURRENCES OF lc_cr IN ld_linha WITH ''.
+    TRANSFER ld_linha TO ld_arquivo.
+  ENDLOOP.
+
+  CLOSE DATASET ld_arquivo.
+endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_FILE_HASH
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FULLPATH                    TYPE        ANY
+* | [--->] ID_ALGORITHM                   TYPE        STRING (default ='MD5')
+* | [<---] ED_HASH                        TYPE        STRING
+* | [<---] ED_ERROR_MESSAGE               TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+method SERVER_FILE_HASH.
+  DATA: lv_file_path TYPE string,
+      lv_file_data TYPE xstring,
+      lv_hash      TYPE string.
+
+  lv_file_path = id_fullpath.
+
+  CLEAR ed_hash.
+  CLEAR ed_error_message.
+
+" 1. Open and read the server file in binary mode
+OPEN DATASET lv_file_path FOR INPUT IN BINARY MODE.
+IF sy-subrc = 0.
+  READ DATASET lv_file_path INTO lv_file_data.
+  CLOSE DATASET lv_file_path.
+ELSE.
+  ed_error_message = 'Error opening file or file does not exist.'.
+  RETURN.
+ENDIF.
+
+" 2. Calculate the hash using the standard system class
+TRY.
+    cl_abap_message_digest=>calculate_hash_for_raw(
+      EXPORTING
+        if_algorithm  = id_algorithm " Options: 'MD5', 'SHA1', 'SHA256', 'SHA512'
+        if_data       = lv_file_data
+      IMPORTING
+        ef_hashstring = lv_hash
+    ).
+
+    ed_hash = lv_hash.
+
+  CATCH cx_abap_message_digest.
+    ed_error_message = 'Error calculating hash.'.
+ENDTRY.
+
 endmethod.
 ENDCLASS.
