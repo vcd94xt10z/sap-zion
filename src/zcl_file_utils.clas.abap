@@ -201,6 +201,11 @@ public section.
     exporting
       value(ED_HASH) type STRING
       !ED_ERROR_MESSAGE type STRING .
+  class-methods SERVER_CONVF_UTF16LE_TO_ANSI
+    importing
+      !ID_FILE type ANY
+    exporting
+      !ED_ERROR_MESSAGE type STRING .
 protected section.
 private section.
 ENDCLASS.
@@ -1692,6 +1697,95 @@ method XSTRING_TO_STRING.
   CATCH cx_root.
   ENDTRY.
 endmethod.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_FILE_UTILS=>SERVER_CONVF_UTF16LE_TO_ANSI
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ID_FILE                        TYPE        ANY
+* | [<---] ED_ERROR_MESSAGE               TYPE        STRING
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+METHOD server_convf_utf16le_to_ansi.
+
+  CLEAR: ed_error_message.
+
+  DATA: lv_file_in     TYPE string,
+        lv_file_out    TYPE string,
+        lv_xstring_in  TYPE xstring,
+        lv_string      TYPE string,
+        lv_xstring_out TYPE xstring,
+        lv_encoding    TYPE abap_encoding.
+
+  " 1. Validação do parâmetro de entrada
+  TRY.
+      lv_file_in = id_file.
+      IF lv_file_in IS INITIAL.
+        ed_error_message = 'O caminho do arquivo de entrada está vazio.'.
+        RETURN.
+      ENDIF.
+    CATCH cx_root.
+      ed_error_message = 'Tipo de parâmetro inválido para ID_FILE.'.
+      RETURN.
+  ENDTRY.
+
+  " Define o arquivo de saída no mesmo diretório com o sufixo '_ansi'
+  "lv_file_out = lv_file_in && '_ansi.txt'.
+  lv_file_out = lv_file_in.
+
+  " 2. Ler o arquivo binário do Application Server (AL11)
+  OPEN DATASET lv_file_in FOR INPUT IN BINARY MODE.
+  IF sy-subrc <> 0.
+    ed_error_message = |Erro ao abrir o arquivo de entrada: { lv_file_in }|.
+    RETURN.
+  ENDIF.
+
+  READ DATASET lv_file_in INTO lv_xstring_in.
+  CLOSE DATASET lv_file_in.
+
+  " 2.1. Remover o BOM (Byte Order Mark) do UTF-16LE ('FFFE') para evitar caracteres indesejados
+  IF xstrlen( lv_xstring_in ) >= 2 AND lv_xstring_in+0(2) = 'FFFE'.
+    lv_xstring_in = lv_xstring_in+2.
+  ENDIF.
+
+  " 3. Converter de UTF-16LE para String interna do ABAP usando CL_ABAP_CODEPAGE
+  TRY.
+      lv_string = cl_abap_codepage=>convert_from(
+        source   = lv_xstring_in
+        codepage = 'UTF-16LE' ).
+    CATCH cx_root INTO DATA(lx_error).
+      ed_error_message = |Erro de conversão UTF-16LE: { lx_error->get_text( ) }|.
+      RETURN.
+  ENDTRY.
+
+  " 4. Converter a String interna do ABAP para ANSI usando a função (Code Page 1100 ou 1404)
+  lv_encoding = '1100'. " '1100' para ISO-8859-1 ou '1404' para Windows-1252
+
+  CALL FUNCTION 'SCMS_STRING_TO_XSTRING'
+    EXPORTING
+      text     = lv_string
+      encoding = lv_encoding
+    IMPORTING
+      buffer   = lv_xstring_out
+    EXCEPTIONS
+      failed   = 1
+      OTHERS   = 2.
+
+  IF sy-subrc <> 0.
+    ed_error_message = 'Erro na conversão da String para ANSI via função.'.
+    RETURN.
+  ENDIF.
+
+  " 5. Salvar o resultado convertido em um novo arquivo ANSI no Application Server
+  OPEN DATASET lv_file_out FOR OUTPUT IN BINARY MODE.
+  IF sy-subrc <> 0.
+    ed_error_message = |Erro ao criar o arquivo de saída: { lv_file_out }|.
+    RETURN.
+  ENDIF.
+
+  TRANSFER lv_xstring_out TO lv_file_out.
+  CLOSE DATASET lv_file_out.
+
+ENDMETHOD.
 
 
 * <SIGNATURE>---------------------------------------------------------------------------------------+
