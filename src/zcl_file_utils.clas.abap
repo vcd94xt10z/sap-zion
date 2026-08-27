@@ -1591,7 +1591,7 @@ endmethod.
 * | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
 method SERVER_MOVE_FILE.
-  " DBR(VCD) 27/08/2026 - Início
+  " VCD 27/08/2026 - Início
   " Cópia byte a byte respeitando o tamanho real do último
   " bloco lido (antes o bloco de 1024 bytes era gravado
   " inteiro, gerando padding com x'00' no arquivo destino)
@@ -1633,7 +1633,7 @@ method SERVER_MOVE_FILE.
   CLOSE DATASET id_from.
 
   DELETE DATASET id_from.
-  " DBR(VCD) 27/08/2026 - Fim (v2)
+  " VCD 27/08/2026 - Fim (v2)
 endmethod.
 
 
