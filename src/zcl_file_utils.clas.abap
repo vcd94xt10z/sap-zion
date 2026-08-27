@@ -1,7 +1,7 @@
 *
 * Autor Vinicius Cesar Dias
 * Projeto https://github.com/vcd94xt10z/sap-zion
-* Versão 0.4 27/06/2026
+* Versão 0.5 27/08/2026
 *
 class ZCL_FILE_UTILS definition
   public
@@ -1591,7 +1591,12 @@ endmethod.
 * | [<---] ED_ERROR_MESSAGE               TYPE        ANY
 * +--------------------------------------------------------------------------------------</SIGNATURE>
 method SERVER_MOVE_FILE.
+  " DBR(VCD) 27/08/2026 - Início
+  " Cópia byte a byte respeitando o tamanho real do último
+  " bloco lido (antes o bloco de 1024 bytes era gravado
+  " inteiro, gerando padding com x'00' no arquivo destino)
   DATA: ld_line(1024) TYPE x.
+  DATA: ld_length     TYPE i.
 
   CLEAR ed_error_message.
 
@@ -1604,25 +1609,31 @@ method SERVER_MOVE_FILE.
   OPEN DATASET id_to FOR OUTPUT IN BINARY MODE.
   IF sy-subrc <> 0.
     ed_error_message = 'Erro ao abrir arquivo para gravação'.
+    CLOSE DATASET id_from.
     RETURN.
   ENDIF.
 
   DO.
-    READ DATASET id_from INTO ld_line.
-    IF sy-subrc EQ 0.
-      TRANSFER ld_line TO id_to.
-    ELSE.
-      IF ld_line IS NOT INITIAL.
-        TRANSFER ld_line TO id_to.
-      ENDIF.
+    CLEAR ld_line.
+    CLEAR ld_length.
+
+    READ DATASET id_from INTO ld_line ACTUAL LENGTH ld_length.
+    DATA(ld_subrc) = sy-subrc.
+
+    IF ld_length > 0.
+      TRANSFER ld_line TO id_to LENGTH ld_length.
+    ENDIF.
+
+    IF ld_subrc <> 0.
       EXIT.
     ENDIF.
   ENDDO.
 
-  DELETE DATASET id_from.
-
   CLOSE DATASET id_to.
   CLOSE DATASET id_from.
+
+  DELETE DATASET id_from.
+  " DBR(VCD) 27/08/2026 - Fim (v2)
 endmethod.
 
 
